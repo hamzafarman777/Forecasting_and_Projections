@@ -1,6 +1,8 @@
 # Model Audit — Loan Default Scorecard v0.1
 
-**Scope:** `loan-default-scorecard.zip`: `notebooks/Loan_Default_Score_Engine.ipynb`, `docs/Model_Validation_Report.docx`, `docs/Step_by_Step_Guide.docx`, `README.md`, `data/Loan_Default.csv`.
+> **Update:** every finding below has been addressed in **v0.2**. See [Remediation status](#remediation-status-v02) at the end. The audited v0.1 notebook is kept unchanged at `audit/Loan_Default_Score_Engine_v0.1.ipynb`.
+
+**Scope (v0.1):** `loan-default-scorecard.zip`: `notebooks/Loan_Default_Score_Engine.ipynb`, `docs/Model_Validation_Report.docx`, `docs/Step_by_Step_Guide.docx`, `README.md`, `data/Loan_Default.csv`.
 **Method:** re-ran the notebook's cells unchanged (plots skipped) on the bundled CSV, then ran probes on the data and the model. Every number below comes from `python audit/reproduce_audit.py` (about 12 seconds).
 **Reproduction:** the headline numbers match the report exactly: test AUC 0.8219, Gini 0.6439, KS 0.5002; validation AUC 0.8189.
 
@@ -108,3 +110,40 @@ Two were removed: the rate columns and `credit_type`. A third (`property_value` 
 7. Fix the notebook file name, the data-commit statement and the `DATA_PATH` default.
 
 *The other notebooks in this repo (Barrick Gold forecast, Loan Default Pilot and Coursera) were not in scope.*
+
+---
+
+## Remediation status (v0.2)
+
+The pipeline was rebuilt in `loan-default-scorecard/notebooks/Loan_Default_Score_Engine.ipynb`, which is committed with its outputs. The docs and README were rewritten to match.
+
+| Finding | Status | What v0.2 does |
+|---|---|---|
+| C1 target is a missing-data artifact | **Mitigated, not fixable** | A label-proxy scan (train only) flags every group of ≥ 30 records with a default rate ≥ 99% or ≤ 1%. Rate columns are dropped. Records with blank `property_value`/`age`/`submission_of_application` or `credit_type = EQUI` are excluded from the scored population. The notebook states and prints the residual fact: in scope, `corr(Status, rate blank) = 1.000`. Status is set to "Not validated for credit use". |
+| C2 leak via mean-imputed LTV/dtir1 | Fixed | No imputation anywhere; blanks get an explicit `MISSING` bin. Largest scored \|WoE\| is 2.22 (v0.1: 10.9). No test record scores PD > 0.99 (v0.1: 10.1%). |
+| C3 unreproducible 0.74 | Fixed | Withdrawn. Every figure is computed in the notebook. Test AUC **0.726 [0.718, 0.734]**; 0.74 lies outside the CI. |
+| H1 preprocessing on full data | Fixed | The split is the first step. Leak scan, bins, WoE, IV and selection are fitted on train only. |
+| H2 reversed coefficient signs | Fixed | Forward selection accepts a feature only if every coefficient stays negative. 0 reversed signs. Cost: validation AUC 0.719 vs 0.722 unconstrained. |
+| H3 duplicate feature | Fixed | A WoE redundancy screen (\|r\| > 0.7) drops `business_or_commercial` (r = 0.999 with `loan_type`) and `loan_amount` (r = 0.798 with `property_value`). A new shared-blank check neutralises `dtir1`'s `MISSING` bin (98.8% of its blanks are also `income` blanks), so that blank is not counted twice. |
+| H4 "four leaks" overstated | Fixed | The report now lists exactly what the scan flags. |
+| M1 biased row drop | Fixed | No rows dropped for blank categoricals; they become `MISSING`. The 100%-default `age`/`submission` blanks are excluded openly as label proxies. |
+| M2 calibration included the leak | Fixed | Calibration is on the in-scope test set: max decile gap 2.6 pp. |
+| M3 validation set unused | Fixed | Validation AUC drives variable selection; test is scored once. |
+| M4 no uncertainty | Fixed | 1,000-resample bootstrap 95% CIs on AUC, Gini and KS. |
+| L1–L3 docs/paths | Fixed | Correct notebook name everywhere; data described as git-ignored and bundled in the zip; `DATA_PATH` auto-detected. |
+| L4 naive AUC understated | Fixed | README states naive AUC 1.00. |
+| L5 unpinned requirements | Fixed | Upper bounds added; verified on pandas 3.0.6, numpy 2.4.6, scikit-learn 1.9.1. |
+
+**v0.2 results** (8 features: `income`, `LTV`, `Neg_ammortization`, `lump_sum_payment`, `dtir1`, `submission_of_application`, `co-applicant_credit_type`, `loan_type`):
+
+| | Validation (n = 26,721) | Test (n = 26,651) |
+|---|---|---|
+| AUC | 0.719 [0.711, 0.727] | 0.726 [0.718, 0.734] |
+| Gini | 0.438 [0.421, 0.455] | 0.452 [0.437, 0.469] |
+| KS | 0.323 [0.310, 0.339] | 0.326 [0.315, 0.345] |
+
+**Still open:**
+- C1 cannot be fixed with this dataset; a genuine repayment outcome is needed.
+- WoE is non-monotonic in LTV and dtir1 (accepted, but flagged for coarse-classing review).
+- There is no out-of-time sample.
+- The manual-review policy for the 10.3% of applications out of scope is undefined.

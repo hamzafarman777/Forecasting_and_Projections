@@ -1,0 +1,25 @@
+# Data — do not commit the dataset
+data/*.csv
+data/*.zip
+
+# Generated outputs
+outputs/*
+!outputs/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Jupyter
+*.ipynb_checkpoints

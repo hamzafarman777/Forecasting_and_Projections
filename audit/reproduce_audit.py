@@ -1,11 +1,11 @@
-"""Reproduces every figure cited in AUDIT.md for the loan-default scorecard.
+"""Reproduces every figure cited in AUDIT.md for the audited v0.1 loan-default scorecard.
 
 Run from the repo root:  python audit/reproduce_audit.py
-Requires pandas, numpy, scikit-learn. Reads the CSV and notebook straight out of
-loan-default-scorecard.zip, re-runs the notebook's modelling cells unchanged, then
-runs the audit probes.
+Requires pandas, numpy, scikit-learn. Re-runs the modelling cells of the audited notebook
+(audit/Loan_Default_Score_Engine_v0.1.ipynb, kept unchanged as audit evidence), then runs the
+audit probes. The CSV is read from loan-default-scorecard/data/ if present, else from the zip.
 """
-import contextlib, io, json, warnings, zipfile
+import contextlib, io, json, os, warnings, zipfile
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -13,9 +13,8 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 
 warnings.filterwarnings('ignore')
-ZIP = 'loan-default-scorecard.zip'
-zf = zipfile.ZipFile(ZIP)
-RAW = pd.read_csv(zf.open('loan-default-scorecard/data/Loan_Default.csv'))
+CSV = 'loan-default-scorecard/data/Loan_Default.csv'
+RAW = pd.read_csv(CSV if os.path.exists(CSV) else zipfile.ZipFile('loan-default-scorecard.zip').open(CSV))
 
 
 def section(t):
@@ -38,7 +37,7 @@ print('EQUI rows with property_value missing:', int((equi & pv_m).sum()), 'of', 
 
 # ---------------------------------------------------------------- 2. rerun the notebook
 section('2. Notebook re-run (cells unchanged, plots skipped)')
-nb = json.load(zf.open('loan-default-scorecard/notebooks/Loan_Default_Score_Engine.ipynb'))
+nb = json.load(open('audit/Loan_Default_Score_Engine_v0.1.ipynb'))
 code = '\n'.join(''.join(c['source']) for c in nb['cells']
                  if c['cell_type'] == 'code' and 'plt.subplots' not in ''.join(c['source']))
 code = code.replace("pd.read_csv(DATA_PATH)", "RAW.copy()")
